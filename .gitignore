@@ -1,0 +1,9 @@
+# Object files
+*.o
+
+# Static/shared libraries
+*.a
+*.so
+
+# Compiled binaries
+example/sample_loader

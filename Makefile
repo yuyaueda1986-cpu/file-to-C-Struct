@@ -1,0 +1,29 @@
+CC      = gcc
+CFLAGS  = -Wall -Wextra -std=c11 -Iinclude
+AR      = ar
+ARFLAGS = rcs
+
+LIB_SRCS = src/ftcs_parser.c src/ftcs_shm.c src/ftcs_core.c
+LIB_OBJS = $(LIB_SRCS:.c=.o)
+LIB      = libftcs.a
+
+EXAMPLE_SRC = example/sample_mapping.c
+EXAMPLE_BIN = example/sample_loader
+
+.PHONY: all example clean
+
+all: $(LIB)
+
+$(LIB): $(LIB_OBJS)
+	$(AR) $(ARFLAGS) $@ $^
+
+src/%.o: src/%.c
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+example: $(EXAMPLE_BIN)
+
+$(EXAMPLE_BIN): $(EXAMPLE_SRC) $(LIB)
+	$(CC) $(CFLAGS) -Iexample -o $@ $< -L. -lftcs
+
+clean:
+	rm -f $(LIB_OBJS) $(LIB) $(EXAMPLE_BIN)
