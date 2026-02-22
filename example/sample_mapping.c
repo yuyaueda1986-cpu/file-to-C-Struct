@@ -3,10 +3,10 @@
 #include "sample_struct.h"
 
 /* Define the mapping from file fields to struct members */
-FTCS_MAPPING_BEGIN(sample_mapping)
-    FTCS_FIELD(sample_t, id,    FTCS_TYPE_INT,    "ID")
-    FTCS_FIELD(sample_t, name,  FTCS_TYPE_STRING, "NAME")
-    FTCS_FIELD(sample_t, value, FTCS_TYPE_DOUBLE, "VALUE")
+FTCS_MAPPING_BEGIN(sample_mapping, sample_t)
+    FTCS_FIELD(id,    "ID")
+    FTCS_FIELD(name,  "NAME")
+    FTCS_FIELD(value, "VALUE")
 FTCS_MAPPING_END()
 
 /* Pretty-print callback */

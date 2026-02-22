@@ -75,21 +75,31 @@ int ftcs_main(int argc, char *argv[], const ftcs_config_t *config)
         }
 
         if (key_value) {
-            const char *pk = config->parser_config->primary_key;
-            if (!pk) {
-                fprintf(stderr, "%s: no primary_key configured\n",
-                        config->program_name);
-                ret = 1;
-                goto cleanup;
-            }
-            const void *rec = ftcs_find_by_key(rs, config->mapping,
-                                               pk, key_value,
-                                               config->struct_size);
-            if (!rec) {
-                fprintf(stderr, "%s: no record with %s=%s\n",
-                        config->program_name, pk, key_value);
-                ret = 1;
-                goto cleanup;
+            const void *rec = NULL;
+            if (config->parser_config->primary_key_mode == FTCS_KEY_INDEX) {
+                rec = ftcs_find_by_index(rs, key_value, config->struct_size);
+                if (!rec) {
+                    /* error already printed by ftcs_find_by_index */
+                    ret = 1;
+                    goto cleanup;
+                }
+            } else {
+                const char *pk = config->parser_config->primary_key;
+                if (!pk) {
+                    fprintf(stderr, "%s: no primary_key configured\n",
+                            config->program_name);
+                    ret = 1;
+                    goto cleanup;
+                }
+                rec = ftcs_find_by_key(rs, config->mapping,
+                                       pk, key_value,
+                                       config->struct_size);
+                if (!rec) {
+                    fprintf(stderr, "%s: no record with %s=%s\n",
+                            config->program_name, pk, key_value);
+                    ret = 1;
+                    goto cleanup;
+                }
             }
             config->dump_fn(rec);
         } else {

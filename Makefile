@@ -7,10 +7,13 @@ LIB_SRCS = src/ftcs_parser.c src/ftcs_shm.c src/ftcs_core.c
 LIB_OBJS = $(LIB_SRCS:.c=.o)
 LIB      = libftcs.a
 
-EXAMPLE_SRC = example/sample_mapping.c
-EXAMPLE_BIN = example/sample_loader
+EXAMPLE_SRC  = example/sample_mapping.c
+EXAMPLE_BIN  = example/sample_loader
 
-.PHONY: all example clean
+EXAMPLE2_SRC = example2/sensor_loader.c
+EXAMPLE2_BIN = example2/sensor_loader
+
+.PHONY: all example example2 clean
 
 all: $(LIB)
 
@@ -25,5 +28,10 @@ example: $(EXAMPLE_BIN)
 $(EXAMPLE_BIN): $(EXAMPLE_SRC) $(LIB)
 	$(CC) $(CFLAGS) -Iexample -o $@ $< -L. -lftcs
 
+example2: $(EXAMPLE2_BIN)
+
+$(EXAMPLE2_BIN): $(EXAMPLE2_SRC) $(LIB)
+	$(CC) $(CFLAGS) -Iexample2 -o $@ $< -L. -lftcs
+
 clean:
-	rm -f $(LIB_OBJS) $(LIB) $(EXAMPLE_BIN)
+	rm -f $(LIB_OBJS) $(LIB) $(EXAMPLE_BIN) $(EXAMPLE2_BIN)

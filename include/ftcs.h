@@ -12,6 +12,7 @@ typedef enum {
     FTCS_TYPE_STRING,
     FTCS_TYPE_CHAR,
     FTCS_TYPE_LONG,
+    FTCS_TYPE_SHORT,
 } ftcs_field_type_t;
 
 /* A single field mapping entry */
@@ -23,25 +24,50 @@ typedef struct {
 } ftcs_field_mapping_t;
 
 /* Macros for defining mapping tables */
-#define FTCS_MAPPING_BEGIN(name) \
+#define FTCS_MAPPING_BEGIN(name, struct_type) \
+    typedef struct_type _ftcs_current_t;       \
     static const ftcs_field_mapping_t name[] = {
 
-#define FTCS_FIELD(struct_type, member, ftype, fname) \
+#define FTCS_INFER_TYPE(member) \
+    _Generic(((_ftcs_current_t *)0)->member, \
+        int:    FTCS_TYPE_INT,    \
+        long:   FTCS_TYPE_LONG,   \
+        short:  FTCS_TYPE_SHORT,  \
+        float:  FTCS_TYPE_FLOAT,  \
+        double: FTCS_TYPE_DOUBLE, \
+        char:   FTCS_TYPE_CHAR,   \
+        char *: FTCS_TYPE_STRING, \
+        default: FTCS_TYPE_STRING)
+
+#define FTCS_FIELD(member, fname) \
     { .field_name = (fname), \
-      .offset = offsetof(struct_type, member), \
-      .size = sizeof(((struct_type *)0)->member), \
-      .type = (ftype) },
+      .offset = offsetof(_ftcs_current_t, member), \
+      .size   = sizeof(((_ftcs_current_t *)0)->member), \
+      .type   = FTCS_INFER_TYPE(member) },
 
 #define FTCS_MAPPING_END() \
     { .field_name = NULL } };
 
 /* ── Parser ──────────────────────────────────────────────────── */
 
+/* Primary key lookup mode */
+typedef enum {
+    FTCS_KEY_FIELD = 0, /* ON (default): look up by named struct field */
+    FTCS_KEY_INDEX = 1, /* OFF: look up by array subscript (int only)  */
+} ftcs_primary_key_mode_t;
+
 /* Parser configuration */
 typedef struct {
     char        comment_char;   /* Comment line prefix (default: '#') */
     const char *kv_separator;   /* Key-value separator (e.g. "=") */
-    const char *primary_key;    /* Primary key field name (e.g. "ID") */
+    const char *primary_key;    /* Primary key field name (e.g. "ID"),
+                                   used only when primary_key_mode == FTCS_KEY_FIELD */
+    ftcs_primary_key_mode_t primary_key_mode; /* Key lookup mode (default: FTCS_KEY_FIELD) */
+    const char *index_field_name; /* FTCS_KEY_INDEX + index_field_name != NULL:
+                                     field in the data file that holds a 1-based position.
+                                     Each record is placed at array[value - 1].
+                                     The field is NOT mapped to any struct member.
+                                     If NULL, records are inserted sequentially. */
 } ftcs_parser_config_t;
 
 /* Dynamic array of parsed records */
@@ -71,6 +97,7 @@ void ftcs_record_set_free(ftcs_record_set_t *rs);
 
 /*
  * Find a record by primary key value (linear search).
+ * Used when primary_key_mode == FTCS_KEY_FIELD.
  *
  * Returns pointer to the matching record within rs->records, or NULL if not found.
  */
@@ -79,6 +106,17 @@ const void *ftcs_find_by_key(const ftcs_record_set_t *rs,
                              const char *primary_key_name,
                              const char *key_value,
                              size_t struct_size);
+
+/*
+ * Find a record by array index (primary_key_mode == FTCS_KEY_INDEX).
+ *
+ * key_value must be a non-negative integer string.
+ * The index must be less than rs->count; larger values are rejected.
+ * Returns pointer to the record at that index, or NULL on error.
+ */
+const void *ftcs_find_by_index(const ftcs_record_set_t *rs,
+                               const char *key_value,
+                               size_t struct_size);
 
 /* ── Core / CLI ──────────────────────────────────────────────── */
 

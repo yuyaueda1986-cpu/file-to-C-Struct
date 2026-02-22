@@ -6,9 +6,10 @@
 ## ビルド
 
 ```bash
-make          # libftcs.a をビルド
-make example  # example/sample_loader をビルド
-make clean    # 成果物を削除
+make           # libftcs.a をビルド
+make example   # example/sample_loader をビルド  （主キー FIELD モード）
+make example2  # example2/sensor_loader をビルド （主キー INDEX モード）
+make clean     # 成果物を削除
 ```
 
 ## プロジェクト構成
@@ -20,10 +21,14 @@ src/
   ftcs_parser.c       # ファイルパーサ / レコードセット / 主キー検索
   ftcs_core.c         # CLI フレームワーク (ftcs_main)
   ftcs_shm.c          # 共有メモリ (スタブ)
-example/
+example/              # 主キー FIELD モード サンプル
   sample_struct.h     # ユーザ定義構造体
   sample_mapping.c    # マッピング定義 + main()
   sample_data.txt     # サンプルデータ
+example2/             # 主キー INDEX モード サンプル
+  sensor_struct.h     # ID メンバを持たない構造体
+  sensor_loader.c     # マッピング定義 + main()
+  sensor_data.txt     # 1ベース ID フィールドつきデータ
 ```
 
 ## データ形式
@@ -33,13 +38,17 @@ example/
 ```
 # Sample records
 ID=42 NAME=TestItem VALUE=3.14
-ID=7 NAME=Widget VALUE=9.81
-ID=100 NAME=Gadget VALUE=2.718
+ID=7  NAME=Widget   VALUE=9.81
+ID=100 NAME=Gadget  VALUE=2.718
 ```
 
 ## 使い方
 
-### 1. 構造体を定義
+### 主キー FIELD モード（デフォルト）
+
+構造体フィールドの値でレコードを検索する通常モード。
+
+#### 1. 構造体を定義
 
 ```c
 typedef struct {
@@ -49,40 +58,42 @@ typedef struct {
 } sample_t;
 ```
 
-### 2. マッピングテーブルを定義
+#### 2. マッピングテーブルを定義
 
 ```c
 #include "ftcs.h"
 
-FTCS_MAPPING_BEGIN(sample_mapping)
-    FTCS_FIELD(sample_t, id,    FTCS_TYPE_INT,    "ID")
-    FTCS_FIELD(sample_t, name,  FTCS_TYPE_STRING, "NAME")
-    FTCS_FIELD(sample_t, value, FTCS_TYPE_DOUBLE, "VALUE")
+FTCS_MAPPING_BEGIN(sample_mapping, sample_t)
+    FTCS_FIELD(id,    "ID")
+    FTCS_FIELD(name,  "NAME")
+    FTCS_FIELD(value, "VALUE")
 FTCS_MAPPING_END()
 ```
 
-### 3. パーサ設定と実行
+`FTCS_MAPPING_BEGIN` の第2引数に構造体型を指定する。
+`FTCS_FIELD` はメンバの C 型を C11 `_Generic` で自動推論するため、型指定は不要。
+
+#### 3. パーサ設定と実行
 
 ```c
 ftcs_parser_config_t pcfg = {
     .comment_char = '#',
     .kv_separator = "=",
     .primary_key  = "ID",
+    /* primary_key_mode は省略 → FTCS_KEY_FIELD */
 };
 
 ftcs_record_set_t *rs = ftcs_parse_file("data.txt", &pcfg,
                                         sample_mapping, sizeof(sample_t));
 
-/* 主キーで検索 */
+/* 主キー (ID=42) で検索 */
 const sample_t *rec = ftcs_find_by_key(rs, sample_mapping,
                                        "ID", "42", sizeof(sample_t));
 
 ftcs_record_set_free(rs);
 ```
 
-### 4. CLI フレームワーク経由で使う
-
-`ftcs_main()` にコンフィグを渡すと、コマンドラインオプションを自動処理する:
+#### CLI 動作例
 
 ```bash
 ./sample_loader -f data.txt -d          # 全レコード出力
@@ -90,25 +101,92 @@ ftcs_record_set_free(rs);
 ./sample_loader -f data.txt -d -k 999  # 該当なしエラー
 ```
 
+---
+
+### 主キー INDEX モード
+
+0ベースの配列添え字でレコードに直接アクセスするモード。
+主キーフィールドを構造体メンバとして持つ必要がない。
+
+#### index_field_name を使った位置指定読み込み
+
+データファイルに 1ベース整数の位置フィールド（例: `ID`）を置くと、
+**ファイル内の出現順序に関係なく** 各レコードを `array[ID - 1]` の位置に格納する。
+
+データファイル例（順序不問）:
+```
+# index 2
+ID=3 LOCATION=ServerRoom TEMP=18.0 HUMIDITY=40.0
+# index 0
+ID=1 LOCATION=RoomA      TEMP=22.5 HUMIDITY=60.0
+# index 1
+ID=2 LOCATION=RoomB      TEMP=25.1 HUMIDITY=55.3
+```
+
+構造体（ID メンバ不要）:
+```c
+typedef struct {
+    char  location[32];
+    float temperature;
+    float humidity;
+} sensor_t;
+```
+
+設定:
+```c
+ftcs_parser_config_t pcfg = {
+    .comment_char     = '#',
+    .kv_separator     = "=",
+    .primary_key_mode = FTCS_KEY_INDEX,
+    .index_field_name = "ID",  /* 1ベース位置フィールド名 */
+};
+
+ftcs_record_set_t *rs = ftcs_parse_file("sensor.txt", &pcfg,
+                                        sensor_mapping, sizeof(sensor_t));
+
+/* 0ベース添え字で取得 (-k 0 → ID=1 のレコード) */
+const sensor_t *rec = ftcs_find_by_index(rs, "0", sizeof(sensor_t));
+
+ftcs_record_set_free(rs);
+```
+
+**INDEX モードの制約:**
+- `-k` には非負整数のみ指定可能
+- 指定値がレコード数以上の場合はエラー（配列外アクセス防止）
+- `index_field_name` フィールドは構造体マッピングに含めない
+
+#### CLI 動作例
+
+```bash
+./sensor_loader -f sensor.txt -d         # 全レコード出力（ID順に並んでいる）
+./sensor_loader -f sensor.txt -d -k 0   # array[0] = ID=1 のレコード
+./sensor_loader -f sensor.txt -d -k 2   # array[2] = ID=3 のレコード
+./sensor_loader -f sensor.txt -d -k 99  # 範囲外エラー
+```
+
+---
+
 ## 主要API
 
 | 関数 | 説明 |
 |---|---|
 | `ftcs_parse_file()` | ファイルを解析し `ftcs_record_set_t *` を返す |
 | `ftcs_record_set_free()` | レコードセットを解放 |
-| `ftcs_find_by_key()` | 主キーでレコードを線形探索 |
+| `ftcs_find_by_key()` | 主キーフィールドでレコードを線形探索（FTCS_KEY_FIELD） |
+| `ftcs_find_by_index()` | 0ベース添え字でレコードを直接取得（FTCS_KEY_INDEX、O(1)） |
 | `ftcs_main()` | CLIエントリポイント (`-f`, `-d`, `-k`, `-h`) |
 
 ## 対応フィールド型
 
-| マクロ | C型 |
-|---|---|
-| `FTCS_TYPE_INT` | `int` |
-| `FTCS_TYPE_LONG` | `long` |
-| `FTCS_TYPE_FLOAT` | `float` |
-| `FTCS_TYPE_DOUBLE` | `double` |
-| `FTCS_TYPE_CHAR` | `char` |
-| `FTCS_TYPE_STRING` | `char[]` (固定長配列) |
+| マクロ | C型 | 自動推論 |
+|---|---|---|
+| `FTCS_TYPE_INT` | `int` | ✓ |
+| `FTCS_TYPE_LONG` | `long` | ✓ |
+| `FTCS_TYPE_SHORT` | `short` | ✓ |
+| `FTCS_TYPE_FLOAT` | `float` | ✓ |
+| `FTCS_TYPE_DOUBLE` | `double` | ✓ |
+| `FTCS_TYPE_CHAR` | `char` | ✓ |
+| `FTCS_TYPE_STRING` | `char[]` (固定長配列) | ✓ (配列は `char *` に decay) |
 
 ## コーディング規約
 
