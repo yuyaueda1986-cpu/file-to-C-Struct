@@ -1,0 +1,2 @@
+# All field types: int, long, short, float, double, char, string
+IVAL=42 LVAL=1234567890 SVAL=32767 FVAL=1.5 DVAL=3.14159 CVAL=Z STRVAL=Hello

@@ -1,0 +1,7 @@
+# This is a comment
+
+# Another comment
+
+ID=1 NAME=Alpha VALUE=1.0
+
+ID=2 NAME=Beta VALUE=2.0

@@ -64,6 +64,12 @@ int ftcs_main(int argc, char *argv[], const ftcs_config_t *config)
         return 1;
     }
 
+    if (config->shm_addr != NULL && config->shm_size > 0) {
+        size_t bytes = rs->count * rs->struct_size;
+        if (bytes > config->shm_size) bytes = config->shm_size;
+        memcpy(config->shm_addr, rs->records, bytes);
+    }
+
     int ret = 0;
 
     if (do_dump) {

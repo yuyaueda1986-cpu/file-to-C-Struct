@@ -1,0 +1,4 @@
+# Basic test data: int, string, double fields
+ID=42 NAME=TestItem VALUE=3.14
+ID=7 NAME=Widget VALUE=9.81
+ID=100 NAME=Gadget VALUE=2.718

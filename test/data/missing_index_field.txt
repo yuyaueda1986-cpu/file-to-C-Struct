@@ -1,0 +1,2 @@
+# index_field_name=ID required but missing from this line
+LOCATION=NoID TEMP=5.0 HUMIDITY=30.0

@@ -1,0 +1,4 @@
+# Out-of-order ID placement (FTCS_KEY_INDEX + index_field_name)
+ID=3 LOCATION=ServerRoom TEMP=18.0 HUMIDITY=40.0
+ID=1 LOCATION=RoomA      TEMP=22.5 HUMIDITY=60.0
+ID=2 LOCATION=RoomB      TEMP=25.1 HUMIDITY=55.3

@@ -127,6 +127,8 @@ typedef struct {
     const ftcs_parser_config_t *parser_config;
     size_t                      struct_size;
     void (*dump_fn)(const void *data);  /* Optional: pretty-print callback */
+    void                       *shm_addr;  /* Caller-provided shm base address (NULL = no shm) */
+    size_t                      shm_size;  /* Caller-provided shm region size in bytes */
 } ftcs_config_t;
 
 /*
@@ -136,13 +138,5 @@ typedef struct {
  */
 int ftcs_main(int argc, char *argv[], const ftcs_config_t *config);
 
-/* ── Shared memory (stub) ────────────────────────────────────── */
-
-/*
- * Stub: shared memory address getter.
- * Will be replaced with a real implementation later.
- * Currently returns NULL.
- */
-void *shm_addr_get(void);
 
 #endif /* FTCS_H */

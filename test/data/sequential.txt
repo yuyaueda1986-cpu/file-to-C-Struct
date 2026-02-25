@@ -1,0 +1,4 @@
+# Sequential mode (FTCS_KEY_INDEX without index_field_name)
+LOCATION=Alpha TEMP=10.0 HUMIDITY=50.0
+LOCATION=Beta  TEMP=20.0 HUMIDITY=60.0
+LOCATION=Gamma TEMP=30.0 HUMIDITY=70.0

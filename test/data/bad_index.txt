@@ -1,0 +1,2 @@
+# ID=0 is invalid (must be >= 1)
+ID=0 LOCATION=Bad TEMP=0.0 HUMIDITY=0.0

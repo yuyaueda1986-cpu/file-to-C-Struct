@@ -8,3 +8,4 @@
 # Compiled binaries
 example/sample_loader
 example2/sensor_loader
+test/test_ftcs
