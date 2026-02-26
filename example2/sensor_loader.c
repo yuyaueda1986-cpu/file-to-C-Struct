@@ -1,4 +1,9 @@
+#define _POSIX_C_SOURCE 200809L
 #include <stdio.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
 #include "ftcs.h"
 #include "sensor_struct.h"
 
@@ -16,6 +21,9 @@
  *   sensor_loader -f sensor_data.txt -d -k 2     # third record
  *   sensor_loader -f sensor_data.txt -d -k 99    # error: out of range
  */
+
+#define SHM_NAME     "/ftcs_sensor"
+#define SHM_CAPACITY 64
 
 FTCS_MAPPING_BEGIN(sensor_mapping, sensor_t)
     FTCS_FIELD(location,    "LOCATION")
@@ -35,6 +43,19 @@ static void sensor_dump(const void *data)
 
 int main(int argc, char *argv[])
 {
+    size_t shm_size = SHM_CAPACITY * sizeof(sensor_t);
+
+    int fd = shm_open(SHM_NAME, O_CREAT | O_RDWR, 0600);
+    if (fd == -1) { perror("shm_open"); return 1; }
+    if (ftruncate(fd, (off_t)shm_size) == -1) {
+        perror("ftruncate"); close(fd); shm_unlink(SHM_NAME); return 1;
+    }
+    void *shm_addr = mmap(NULL, shm_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    close(fd);
+    if (shm_addr == MAP_FAILED) {
+        perror("mmap"); shm_unlink(SHM_NAME); return 1;
+    }
+
     ftcs_config_t config = {
         .program_name  = "sensor_loader",
         .mapping       = sensor_mapping,
@@ -46,6 +67,12 @@ int main(int argc, char *argv[])
         },
         .struct_size = sizeof(sensor_t),
         .dump_fn     = sensor_dump,
+        .shm_addr    = shm_addr,
+        .shm_size    = shm_size,
     };
-    return ftcs_main(argc, argv, &config);
+    int ret = ftcs_main(argc, argv, &config);
+
+    munmap(shm_addr, shm_size);
+    shm_unlink(SHM_NAME);
+    return ret;
 }

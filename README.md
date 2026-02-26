@@ -9,6 +9,7 @@
 make           # libftcs.a をビルド
 make example   # example/sample_loader をビルド  （主キー FIELD モード）
 make example2  # example2/sensor_loader をビルド （主キー INDEX モード）
+make test      # gtest スイートをビルドして実行
 make clean     # 成果物を削除
 ```
 
@@ -20,7 +21,6 @@ include/
 src/
   ftcs_parser.c       # ファイルパーサ / レコードセット / 主キー検索
   ftcs_core.c         # CLI フレームワーク (ftcs_main)
-  ftcs_shm.c          # 共有メモリ (スタブ)
 example/              # 主キー FIELD モード サンプル
   sample_struct.h     # ユーザ定義構造体
   sample_mapping.c    # マッピング定義 + main()
@@ -29,6 +29,9 @@ example2/             # 主キー INDEX モード サンプル
   sensor_struct.h     # ID メンバを持たない構造体
   sensor_loader.c     # マッピング定義 + main()
   sensor_data.txt     # 1ベース ID フィールドつきデータ
+test/
+  test_ftcs.cpp       # gtest スイート
+  data/               # テスト用データファイル群
 ```
 
 ## データ形式
@@ -176,6 +179,8 @@ ftcs_record_set_free(rs);
 | `ftcs_find_by_index()` | 0ベース添え字でレコードを直接取得（FTCS_KEY_INDEX、O(1)） |
 | `ftcs_main()` | CLIエントリポイント (`-f`, `-d`, `-k`, `-h`) |
 
+`ftcs_config_t` の `shm_addr` / `shm_size` フィールドに呼び出し元が確保した共有メモリ領域を渡すことで、共有メモリへの書き込みが有効になる（`NULL` で無効）。
+
 ## 対応フィールド型
 
 | マクロ | C型 | 自動推論 |
@@ -194,3 +199,12 @@ ftcs_record_set_free(rs);
 - コンパイラ警告: `-Wall -Wextra`
 - プレフィックス: 公開APIは `ftcs_` を使用
 - マッピング定義には `FTCS_FIELD` / `FTCS_MAPPING_BEGIN` / `FTCS_MAPPING_END` マクロを使用
+- **1翻訳単位に 1 マッピングのみ**（`_ftcs_current_t` typedef の衝突を避けるため）
+
+## 注意事項
+
+- 共有メモリ管理は呼び出し元の責務。`ftcs_config_t` の `shm_addr` / `shm_size` に確保済み領域を渡すこと（`NULL` で無効）。
+- `ftcs_record_set_t` を使い終わったら必ず `ftcs_record_set_free()` で解放すること。
+- `ftcs_find_by_key()` は線形探索のため、大量レコード時はパフォーマンスに注意。
+- `ftcs_find_by_index()` は O(1) だがバウンドチェックあり。
+- `index_field_name` を使う場合、ID が飛び番だと間のスロットはゼロ初期化される。

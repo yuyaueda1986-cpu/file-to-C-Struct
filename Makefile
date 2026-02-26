@@ -34,12 +34,12 @@ src/%.o: src/%.c
 example: $(EXAMPLE_BIN)
 
 $(EXAMPLE_BIN): $(EXAMPLE_SRC) $(LIB)
-	$(CC) $(CFLAGS) -Iexample -o $@ $< -L. -lftcs
+	$(CC) $(CFLAGS) -Iexample -o $@ $< -L. -lftcs -lrt
 
 example2: $(EXAMPLE2_BIN)
 
 $(EXAMPLE2_BIN): $(EXAMPLE2_SRC) $(LIB)
-	$(CC) $(CFLAGS) -Iexample2 -o $@ $< -L. -lftcs
+	$(CC) $(CFLAGS) -Iexample2 -o $@ $< -L. -lftcs -lrt
 
 test: $(TEST_BIN)
 	$(TEST_BIN)
