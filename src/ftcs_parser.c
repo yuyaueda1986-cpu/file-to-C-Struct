@@ -5,27 +5,27 @@
 #include <errno.h>
 #include "ftcs.h"
 
-/* 設定ファイルの1行として想定する最大バイト数。
- * 実用的な KV ファイルではこのサイズを超えることはほぼない。 */
+// 設定ファイルの1行として想定する最大バイト数。
+// 実用的な KV ファイルではこのサイズを超えることはほぼない。
 #define LINE_BUF_SIZE 4096
 
-/* 初期確保スロット数。大半のユースケースで再アロケートが不要な値として経験的に選択。 */
+// 初期確保スロット数。大半のユースケースで再アロケートが不要な値として経験的に選択。
 #define INITIAL_CAPACITY 16
 
-/* ── 関数宣言（目次） ────────────────────────────────────── */
+// --- 関数宣言（目次） ---
 
 static int   parse_line_kv(char *line, const char *kv_sep,
-                            const ftcs_field_mapping_t *mapping, void *out);
+                            const ftcs_field_mapping_t *mapping, void *out); // 1行を構造体に書き込む
 static const ftcs_field_mapping_t *find_mapping(const ftcs_field_mapping_t *mapping,
-                                                 const char *name);
-static int   set_field(void *out, const ftcs_field_mapping_t *m, const char *val);
-static char *trim(char *s);
-static int   record_set_grow(ftcs_record_set_t *rs);
-static int   record_set_ensure(ftcs_record_set_t *rs, size_t required);
+                                                 const char *name);           // フィールド名でエントリを検索する
+static int   set_field(void *out, const ftcs_field_mapping_t *m, const char *val); // 文字列値を構造体フィールドに書き込む
+static char *trim(char *s);                                                   // 先頭・末尾の空白を除去する
+static int   record_set_grow(ftcs_record_set_t *rs);                          // 順次追加モード用の容量拡張
+static int   record_set_ensure(ftcs_record_set_t *rs, size_t required);       // インデックスモード用の容量確保
 static int   extract_field_int(const char *line, const char *kv_sep,
-                               const char *field_name, long *out_val);
+                               const char *field_name, long *out_val);        // 指定フィールドの整数値を抽出する
 
-/* ── 関数定義（概要→詳細の順） ──────────────────────────── */
+// --- 関数定義（概要→詳細の順） ---
 
 /**
  * @brief 1行分のスペース区切り KEY=VALUE ペアを構造体に書き込む
@@ -39,12 +39,14 @@ static int   extract_field_int(const char *line, const char *kv_sep,
 static int parse_line_kv(char *line, const char *kv_sep,
                          const ftcs_field_mapping_t *mapping, void *out)
 {
-    size_t sep_len = strlen(kv_sep);
-    char  *saveptr;
-    char  *token = strtok_r(line, " \t", &saveptr);
+    size_t sep_len = strlen(kv_sep); // 区切り文字列の長さ（strstr 後のポインタ計算に使用）
+    char  *saveptr;                  // strtok_r の状態保持用
+    char  *token = strtok_r(line, " \t", &saveptr); // 最初のトークン
 
+    // スペース区切りの各トークンを順に処理する
     while (token) {
-        char *sep = strstr(token, kv_sep);
+        char *sep = strstr(token, kv_sep); // kv_sep の位置を検索する
+        // sep が NULL の場合は区切り文字のない不正なトークン
         if (!sep) {
             fprintf(stderr, "ftcs: 不正なトークン（区切り文字 '%s' がない）: %s\n",
                     kv_sep, token);
@@ -52,10 +54,11 @@ static int parse_line_kv(char *line, const char *kv_sep,
         }
 
         *sep      = '\0';
-        char *key = token;
-        char *val = sep + sep_len;
+        char *key = token;          // kv_sep 以前の部分がキー
+        char *val = sep + sep_len;  // kv_sep 以降の部分が値
 
-        const ftcs_field_mapping_t *m = find_mapping(mapping, key);
+        const ftcs_field_mapping_t *m = find_mapping(mapping, key); // キーに対応するマッピングエントリ
+        // マッピングに存在するフィールドのみ書き込む（未定義キーは無視）
         if (m) {
             if (set_field(out, m, val) != 0) {
                 return -1;
@@ -77,7 +80,9 @@ static int parse_line_kv(char *line, const char *kv_sep,
 static const ftcs_field_mapping_t *find_mapping(const ftcs_field_mapping_t *mapping,
                                                  const char *name)
 {
+    // 番兵（field_name == NULL）に達するまで線形探索する
     for (const ftcs_field_mapping_t *m = mapping; m->field_name != NULL; m++) {
+        // 名前が完全一致したエントリを返す
         if (strcmp(m->field_name, name) == 0) {
             return m;
         }
@@ -95,12 +100,14 @@ static const ftcs_field_mapping_t *find_mapping(const ftcs_field_mapping_t *mapp
  */
 static int set_field(void *out, const ftcs_field_mapping_t *m, const char *val)
 {
-    char *base = (char *)out;
-    char *endptr;
+    char *base   = (char *)out; // 構造体先頭アドレス（オフセット計算の基点）
+    char *endptr;               // strtol/strtof の変換終端ポインタ（変換成否の確認に使用）
 
+    // フィールドの型に応じた変換と書き込みを行う
     switch (m->type) {
     case FTCS_TYPE_INT:
         *(int *)(base + m->offset) = (int)strtol(val, &endptr, 10);
+        // 変換後に文字が残っている場合は無効な数値
         if (*endptr != '\0') {
             fprintf(stderr, "ftcs: int として無効な値 '%s'（フィールド: '%s'）\n",
                     val, m->field_name);
@@ -109,6 +116,7 @@ static int set_field(void *out, const ftcs_field_mapping_t *m, const char *val)
         break;
     case FTCS_TYPE_LONG:
         *(long *)(base + m->offset) = strtol(val, &endptr, 10);
+        // 変換後に文字が残っている場合は無効な数値
         if (*endptr != '\0') {
             fprintf(stderr, "ftcs: long として無効な値 '%s'（フィールド: '%s'）\n",
                     val, m->field_name);
@@ -117,6 +125,7 @@ static int set_field(void *out, const ftcs_field_mapping_t *m, const char *val)
         break;
     case FTCS_TYPE_FLOAT:
         *(float *)(base + m->offset) = strtof(val, &endptr);
+        // 変換後に文字が残っている場合は無効な数値
         if (*endptr != '\0') {
             fprintf(stderr, "ftcs: float として無効な値 '%s'（フィールド: '%s'）\n",
                     val, m->field_name);
@@ -125,6 +134,7 @@ static int set_field(void *out, const ftcs_field_mapping_t *m, const char *val)
         break;
     case FTCS_TYPE_DOUBLE:
         *(double *)(base + m->offset) = strtod(val, &endptr);
+        // 変換後に文字が残っている場合は無効な数値
         if (*endptr != '\0') {
             fprintf(stderr, "ftcs: double として無効な値 '%s'（フィールド: '%s'）\n",
                     val, m->field_name);
@@ -140,6 +150,7 @@ static int set_field(void *out, const ftcs_field_mapping_t *m, const char *val)
         break;
     case FTCS_TYPE_SHORT:
         *(short *)(base + m->offset) = (short)strtol(val, &endptr, 10);
+        // 変換後に文字が残っている場合は無効な数値
         if (*endptr != '\0') {
             fprintf(stderr, "ftcs: short として無効な値 '%s'（フィールド: '%s'）\n",
                     val, m->field_name);
@@ -161,10 +172,12 @@ static int set_field(void *out, const ftcs_field_mapping_t *m, const char *val)
  */
 static char *trim(char *s)
 {
+    // 先頭の空白・タブを読み飛ばす
     while (*s == ' ' || *s == '\t') {
         s++;
     }
-    size_t len = strlen(s);
+    size_t len = strlen(s); // トリム後の末尾位置を決めるための長さ
+    // 末尾の空白・改行を NUL で上書きして除去する
     while (len > 0 && (s[len - 1] == ' ' || s[len - 1] == '\t' ||
                        s[len - 1] == '\n' || s[len - 1] == '\r')) {
         s[--len] = '\0';
@@ -182,12 +195,14 @@ static char *trim(char *s)
  */
 static int record_set_grow(ftcs_record_set_t *rs)
 {
+    // まだ空きがある場合は拡張不要
     if (rs->count < rs->capacity) {
         return 0;
     }
 
-    size_t new_cap = rs->capacity * 2;
-    void  *new_buf = realloc(rs->records, new_cap * rs->struct_size);
+    size_t new_cap = rs->capacity * 2;                           // 2倍に拡張する
+    void  *new_buf = realloc(rs->records, new_cap * rs->struct_size); // 拡張後のバッファ
+    // realloc 失敗時は元のバッファをそのまま保持し呼び出し元にエラーを伝える
     if (!new_buf) {
         perror("ftcs: realloc");
         return -1;
@@ -208,21 +223,24 @@ static int record_set_grow(ftcs_record_set_t *rs)
  */
 static int record_set_ensure(ftcs_record_set_t *rs, size_t required)
 {
+    // すでに十分な容量がある場合は何もしない
     if (required <= rs->capacity) {
         return 0;
     }
 
-    size_t new_cap = rs->capacity;
+    size_t new_cap = rs->capacity; // required を満たすまで2倍ずつ拡張する
+    // required を超えるまでループする
     while (new_cap < required) {
         new_cap *= 2;
     }
 
-    void *new_buf = realloc(rs->records, new_cap * rs->struct_size);
+    void *new_buf = realloc(rs->records, new_cap * rs->struct_size); // 拡張後のバッファ
+    // realloc 失敗時は元のバッファをそのまま保持し呼び出し元にエラーを伝える
     if (!new_buf) {
         perror("ftcs: realloc");
         return -1;
     }
-    /* 新規スロットをゼロ初期化して、未書き込みスロットを安全な状態にする */
+    // 新規スロットをゼロ初期化して、未書き込みスロットを安全な状態にする
     memset((char *)new_buf + rs->capacity * rs->struct_size, 0,
            (new_cap - rs->capacity) * rs->struct_size);
     rs->records  = new_buf;
@@ -244,23 +262,27 @@ static int record_set_ensure(ftcs_record_set_t *rs, size_t required)
 static int extract_field_int(const char *line, const char *kv_sep,
                               const char *field_name, long *out_val)
 {
-    char buf[LINE_BUF_SIZE];
+    char buf[LINE_BUF_SIZE]; // 元の行を保護するための作業用バッファ
     strncpy(buf, line, sizeof(buf) - 1);
     buf[sizeof(buf) - 1] = '\0';
 
-    size_t sep_len = strlen(kv_sep);
-    char  *saveptr;
-    char  *token = strtok_r(buf, " \t", &saveptr);
+    size_t sep_len = strlen(kv_sep);                        // 区切り文字列の長さ
+    char  *saveptr;                                         // strtok_r の状態保持用
+    char  *token = strtok_r(buf, " \t", &saveptr);          // 最初のトークン
 
+    // スペース区切りの各トークンを順に処理する
     while (token) {
-        char *sep = strstr(token, kv_sep);
+        char *sep = strstr(token, kv_sep); // kv_sep の位置を検索する
+        // kv_sep を持つトークンのみ処理する（不正トークンは読み飛ばす）
         if (sep) {
             *sep      = '\0';
-            char *key = token;
-            char *val = sep + sep_len;
+            char *key = token;          // kv_sep 以前の部分がキー
+            char *val = sep + sep_len;  // kv_sep 以降の部分が値
+            // 対象フィールドが見つかった場合は整数変換して返す
             if (strcmp(key, field_name) == 0) {
-                char *endptr;
+                char *endptr; // 変換終端ポインタ（変換成否の確認に使用）
                 *out_val = strtol(val, &endptr, 10);
+                // 変換後に文字が残っている場合は無効な数値
                 if (*endptr != '\0') {
                     return -1;
                 }
@@ -269,29 +291,31 @@ static int extract_field_int(const char *line, const char *kv_sep,
         }
         token = strtok_r(NULL, " \t", &saveptr);
     }
-    return -1; /* フィールドが見つからなかった */
+    return -1; // フィールドが見つからなかった
 }
 
-/* ── 公開 API ────────────────────────────────────────────── */
+// --- 公開 API ---
 
 ftcs_record_set_t *ftcs_parse_file(const char *filepath,
                                    const ftcs_parser_config_t *config,
                                    const ftcs_field_mapping_t *mapping,
                                    size_t struct_size)
 {
+    // NULL チェック：必須引数が欠けている場合は即座にエラーとする
     if (!filepath || !config || !mapping || !config->kv_separator) {
         fprintf(stderr, "ftcs: ftcs_parse_file に NULL 引数が渡された\n");
         return NULL;
     }
 
-    FILE *fp = fopen(filepath, "r");
+    FILE *fp = fopen(filepath, "r"); // 入力ファイルのストリーム
+    // ファイルが開けない場合は strerror で詳細を表示する
     if (!fp) {
         fprintf(stderr, "ftcs: '%s' を開けない: %s\n", filepath, strerror(errno));
         return NULL;
     }
 
-    /* rs と rs->records は ftcs_record_set_free() で解放される */
-    ftcs_record_set_t *rs = calloc(1, sizeof(*rs));
+    // rs と rs->records は ftcs_record_set_free() で解放される
+    ftcs_record_set_t *rs = calloc(1, sizeof(*rs)); // レコード集合（ヒープ確保）
     if (!rs) {
         perror("ftcs: calloc");
         fclose(fp);
@@ -308,22 +332,25 @@ ftcs_record_set_t *ftcs_parse_file(const char *filepath,
         return NULL;
     }
 
-    char line[LINE_BUF_SIZE];
-    char comment = config->comment_char ? config->comment_char : '#';
+    char line[LINE_BUF_SIZE];                                              // 1行読み込みバッファ
+    char comment = config->comment_char ? config->comment_char : '#';     // コメント行の先頭文字
 
-    /* index_field_name が指定されている場合は配置位置指定モード */
+    // index_field_name が指定されている場合は配置位置指定モード
     int use_index_field = (config->primary_key_mode == FTCS_KEY_INDEX)
                           && (config->index_field_name != NULL);
 
+    // ファイルを1行ずつ読み込んで構造体に変換する
     while (fgets(line, sizeof(line), fp)) {
-        char *trimmed = trim(line);
+        char *trimmed = trim(line); // 前後の空白・改行を除去したポインタ
+        // 空行またはコメント行は読み飛ばす
         if (trimmed[0] == '\0' || trimmed[0] == comment) {
             continue;
         }
 
         if (use_index_field) {
-            /* --- 配置位置指定モード: 1-based インデックスで array[値-1] に格納 --- */
-            long id_val;
+            // --- 配置位置指定モード: 1-based インデックスで array[値-1] に格納 ---
+            long id_val; // インデックスフィールドから抽出した 1-based の配置位置
+            // インデックスフィールドの抽出に失敗した場合はエラー
             if (extract_field_int(trimmed, config->kv_separator,
                                   config->index_field_name, &id_val) != 0) {
                 fprintf(stderr,
@@ -333,6 +360,7 @@ ftcs_record_set_t *ftcs_parse_file(const char *filepath,
                 fclose(fp);
                 return NULL;
             }
+            // インデックスは 1 以上でなければならない
             if (id_val < 1) {
                 fprintf(stderr,
                         "ftcs: インデックスフィールド '%s' は 1 以上でなければならない（値: %ld）\n",
@@ -342,38 +370,43 @@ ftcs_record_set_t *ftcs_parse_file(const char *filepath,
                 return NULL;
             }
 
-            size_t pos = (size_t)(id_val - 1); /* 1-based を 0-based に変換 */
+            size_t pos = (size_t)(id_val - 1); // 1-based を 0-based に変換
 
+            // pos + 1 スロット分の容量を確保する
             if (record_set_ensure(rs, pos + 1) != 0) {
                 ftcs_record_set_free(rs);
                 fclose(fp);
                 return NULL;
             }
 
-            void *rec = (char *)rs->records + pos * struct_size;
+            void *rec = (char *)rs->records + pos * struct_size; // 書き込み先スロット
             memset(rec, 0, struct_size);
 
+            // KV 行を構造体フィールドに書き込む
             if (parse_line_kv(trimmed, config->kv_separator, mapping, rec) != 0) {
                 ftcs_record_set_free(rs);
                 fclose(fp);
                 return NULL;
             }
 
+            // count はロード済みスロット数の最大値を追跡する
             if (pos + 1 > rs->count) {
                 rs->count = pos + 1;
             }
 
         } else {
-            /* --- 順次モード: ファイルの出現順に末尾へ追加 --- */
+            // --- 順次モード: ファイルの出現順に末尾へ追加 ---
+            // 容量が足りない場合は拡張する
             if (record_set_grow(rs) != 0) {
                 ftcs_record_set_free(rs);
                 fclose(fp);
                 return NULL;
             }
 
-            void *rec = (char *)rs->records + rs->count * struct_size;
+            void *rec = (char *)rs->records + rs->count * struct_size; // 末尾スロット
             memset(rec, 0, struct_size);
 
+            // KV 行を構造体フィールドに書き込む
             if (parse_line_kv(trimmed, config->kv_separator, mapping, rec) != 0) {
                 ftcs_record_set_free(rs);
                 fclose(fp);
@@ -390,6 +423,7 @@ ftcs_record_set_t *ftcs_parse_file(const char *filepath,
 
 void ftcs_record_set_free(ftcs_record_set_t *rs)
 {
+    // NULL の場合は早期リターン（二重解放防止）
     if (!rs) {
         return;
     }
@@ -401,18 +435,21 @@ const void *ftcs_find_by_index(const ftcs_record_set_t *rs,
                                const char *key_value,
                                size_t struct_size)
 {
+    // NULL チェック：引数が不正な場合は安全に NULL を返す
     if (!rs || !key_value) {
         return NULL;
     }
 
-    char *endptr;
-    long  idx = strtol(key_value, &endptr, 10);
+    char *endptr; // strtol の変換終端ポインタ（変換成否の確認に使用）
+    long  idx = strtol(key_value, &endptr, 10); // 文字列を整数インデックスに変換
+    // 数値以外の文字が残っているか負値の場合は無効なインデックス
     if (*endptr != '\0' || idx < 0) {
         fprintf(stderr, "ftcs: インデックスキーは非負整数でなければならない: '%s'\n",
                 key_value);
         return NULL;
     }
 
+    // インデックスがレコード数を超えている場合は範囲外エラー
     if ((size_t)idx >= rs->count) {
         fprintf(stderr, "ftcs: インデックス %ld は範囲外（レコード数: %zu）\n",
                 idx, rs->count);
@@ -428,19 +465,23 @@ const void *ftcs_find_by_key(const ftcs_record_set_t *rs,
                              const char *key_value,
                              size_t struct_size)
 {
+    // NULL チェック：必須引数が欠けている場合は安全に NULL を返す
     if (!rs || !mapping || !primary_key_name || !key_value) {
         return NULL;
     }
 
-    const ftcs_field_mapping_t *m = find_mapping(mapping, primary_key_name);
+    const ftcs_field_mapping_t *m = find_mapping(mapping, primary_key_name); // プライマリキーのマッピングエントリ
+    // プライマリキーがマッピングに存在しない場合は検索不能
     if (!m) {
         return NULL;
     }
 
+    // 全レコードを線形探索してキー値が一致するレコードを返す
     for (size_t i = 0; i < rs->count; i++) {
-        const char *rec   = (const char *)rs->records + i * struct_size;
-        const void *field = rec + m->offset;
+        const char *rec   = (const char *)rs->records + i * struct_size; // i 番目のレコード先頭
+        const void *field = rec + m->offset;                             // プライマリキーフィールドの位置
 
+        // フィールド型に応じた比較を行う
         switch (m->type) {
         case FTCS_TYPE_INT:
             if (*(const int *)field == (int)strtol(key_value, NULL, 10)) {
