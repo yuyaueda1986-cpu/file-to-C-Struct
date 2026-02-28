@@ -3,31 +3,50 @@
 
 #include <stddef.h>
 
-/* ── Field types ─────────────────────────────────────────────── */
+/* ── フィールド型定義 ──────────────────────────────────────── */
 
+/**
+ * @brief 構造体フィールドのデータ型
+ */
 typedef enum {
-    FTCS_TYPE_INT,
-    FTCS_TYPE_FLOAT,
-    FTCS_TYPE_DOUBLE,
-    FTCS_TYPE_STRING,
-    FTCS_TYPE_CHAR,
-    FTCS_TYPE_LONG,
-    FTCS_TYPE_SHORT,
+    FTCS_TYPE_INT,    /**< int 型 */
+    FTCS_TYPE_FLOAT,  /**< float 型 */
+    FTCS_TYPE_DOUBLE, /**< double 型 */
+    FTCS_TYPE_STRING, /**< 文字列型（char 配列） */
+    FTCS_TYPE_CHAR,   /**< char 型（1文字） */
+    FTCS_TYPE_LONG,   /**< long 型 */
+    FTCS_TYPE_SHORT,  /**< short 型 */
 } ftcs_field_type_t;
 
-/* A single field mapping entry */
+/**
+ * @brief フィールドマッピングエントリ1件
+ *
+ * ファイル上のキー名と、対応する構造体フィールドの位置・型を紐付ける。
+ */
 typedef struct {
-    const char       *field_name;   /* Field name/identifier in the file */
-    size_t            offset;       /* Offset within the target struct */
-    size_t            size;         /* Size of the field in bytes */
-    ftcs_field_type_t type;         /* Field type */
+    const char       *field_name; /**< ファイル内のキー名（識別子） */
+    size_t            offset;     /**< 対象構造体内のバイトオフセット */
+    size_t            size;       /**< フィールドのバイトサイズ */
+    ftcs_field_type_t type;       /**< フィールドのデータ型 */
 } ftcs_field_mapping_t;
 
-/* Macros for defining mapping tables */
+/* ── マッピングテーブル定義マクロ ─────────────────────────── */
+
+/**
+ * @brief マッピングテーブル定義の開始マクロ
+ *
+ * FTCS_MAPPING_END() と対で使用する。
+ * @param name        テーブル変数名
+ * @param struct_type マッピング対象の構造体型
+ */
 #define FTCS_MAPPING_BEGIN(name, struct_type) \
     typedef struct_type _ftcs_current_t;       \
     static const ftcs_field_mapping_t name[] = {
 
+/**
+ * @brief メンバの型を C11 _Generic で自動推定するマクロ
+ * @param member 型推定対象のメンバ名
+ */
 #define FTCS_INFER_TYPE(member) \
     _Generic(((_ftcs_current_t *)0)->member, \
         int:    FTCS_TYPE_INT,    \
@@ -39,67 +58,93 @@ typedef struct {
         char *: FTCS_TYPE_STRING, \
         default: FTCS_TYPE_STRING)
 
+/**
+ * @brief フィールドマッピングエントリを1件追加するマクロ
+ * @param member 構造体メンバ名
+ * @param fname  ファイル内のキー名（文字列）
+ */
 #define FTCS_FIELD(member, fname) \
     { .field_name = (fname), \
       .offset = offsetof(_ftcs_current_t, member), \
       .size   = sizeof(((_ftcs_current_t *)0)->member), \
       .type   = FTCS_INFER_TYPE(member) },
 
+/**
+ * @brief マッピングテーブル定義の終端マクロ
+ *
+ * 番兵エントリ（field_name == NULL）を追加してテーブルを閉じる。
+ */
 #define FTCS_MAPPING_END() \
     { .field_name = NULL } };
 
-/* ── Parser ──────────────────────────────────────────────────── */
+/* ── パーサー ────────────────────────────────────────────── */
 
-/* Primary key lookup mode */
+/**
+ * @brief プライマリキーの検索モード
+ */
 typedef enum {
-    FTCS_KEY_FIELD = 0, /* ON (default): look up by named struct field */
-    FTCS_KEY_INDEX = 1, /* OFF: look up by array subscript (int only)  */
+    FTCS_KEY_FIELD = 0, /**< 名前付き構造体フィールドで検索（デフォルト） */
+    FTCS_KEY_INDEX = 1, /**< 配列添字（整数）で検索 */
 } ftcs_primary_key_mode_t;
 
-/* Parser configuration */
+/**
+ * @brief パーサー設定
+ */
 typedef struct {
-    char        comment_char;   /* Comment line prefix (default: '#') */
-    const char *kv_separator;   /* Key-value separator (e.g. "=") */
-    const char *primary_key;    /* Primary key field name (e.g. "ID"),
-                                   used only when primary_key_mode == FTCS_KEY_FIELD */
-    ftcs_primary_key_mode_t primary_key_mode; /* Key lookup mode (default: FTCS_KEY_FIELD) */
-    const char *index_field_name; /* FTCS_KEY_INDEX + index_field_name != NULL:
-                                     field in the data file that holds a 1-based position.
-                                     Each record is placed at array[value - 1].
-                                     The field is NOT mapped to any struct member.
-                                     If NULL, records are inserted sequentially. */
+    char        comment_char;   /**< コメント行の先頭文字（デフォルト: '#'） */
+    const char *kv_separator;   /**< キーと値の区切り文字列（例: "="） */
+    const char *primary_key;    /**< プライマリキーのフィールド名（例: "ID"）。
+                                     primary_key_mode == FTCS_KEY_FIELD のときのみ使用 */
+    ftcs_primary_key_mode_t primary_key_mode; /**< キー検索モード（デフォルト: FTCS_KEY_FIELD） */
+    const char *index_field_name; /**< FTCS_KEY_INDEX 時にレコードの配置位置を示すフィールド名。
+                                       値は 1-based の整数で、array[値-1] に格納される。
+                                       NULL のときは出現順（sequential）に格納する。
+                                       このフィールド自体は構造体メンバには書き込まれない。 */
 } ftcs_parser_config_t;
 
-/* Dynamic array of parsed records */
+/**
+ * @brief パース結果のレコード集合（動的配列）
+ */
 typedef struct {
-    void   *records;      /* Contiguous array of structs */
-    size_t  count;        /* Number of records */
-    size_t  capacity;     /* Allocated capacity */
-    size_t  struct_size;  /* Size of one element */
+    void   *records;     /**< 構造体の連続配列（calloc で確保） */
+    size_t  count;       /**< 格納済みレコード数 */
+    size_t  capacity;    /**< 確保済みスロット数 */
+    size_t  struct_size; /**< 1レコードのバイトサイズ */
 } ftcs_record_set_t;
 
-/*
- * Parse a file and return a record set.
+/**
+ * @brief ファイルをパースしてレコード集合を返す
  *
- * Each non-comment, non-empty line is parsed as space-delimited KEY=VALUE pairs
- * into one struct instance.
+ * コメント行・空行を読み飛ばし、各行をスペース区切りの KEY=VALUE 形式として
+ * 構造体インスタンスにマッピングする。
  *
- * Returns a newly allocated ftcs_record_set_t on success, NULL on error.
- * Caller must free with ftcs_record_set_free().
+ * @param filepath    入力ファイルのパス
+ * @param config      パーサー設定
+ * @param mapping     フィールドマッピングテーブル（末尾は field_name == NULL の番兵）
+ * @param struct_size 1レコードのバイトサイズ（sizeof(型) を渡すこと）
+ * @return 成功時は新たに確保した ftcs_record_set_t へのポインタ、失敗時は NULL
+ * @note 戻り値は必ず ftcs_record_set_free() で解放すること
  */
 ftcs_record_set_t *ftcs_parse_file(const char *filepath,
                                    const ftcs_parser_config_t *config,
                                    const ftcs_field_mapping_t *mapping,
                                    size_t struct_size);
 
-/* Free a record set returned by ftcs_parse_file() */
+/**
+ * @brief ftcs_parse_file() が返したレコード集合を解放する
+ * @param rs 解放対象（NULL でも安全に無視される）
+ */
 void ftcs_record_set_free(ftcs_record_set_t *rs);
 
-/*
- * Find a record by primary key value (linear search).
- * Used when primary_key_mode == FTCS_KEY_FIELD.
+/**
+ * @brief プライマリキー値でレコードを線形検索する（FTCS_KEY_FIELD 用）
  *
- * Returns pointer to the matching record within rs->records, or NULL if not found.
+ * @param rs               検索対象のレコード集合
+ * @param mapping          フィールドマッピングテーブル
+ * @param primary_key_name プライマリキーのフィールド名
+ * @param key_value        検索するキー値（文字列）
+ * @param struct_size      1レコードのバイトサイズ
+ * @return 一致レコードへのポインタ（rs->records 内）、見つからなければ NULL
  */
 const void *ftcs_find_by_key(const ftcs_record_set_t *rs,
                              const ftcs_field_mapping_t *mapping,
@@ -107,34 +152,42 @@ const void *ftcs_find_by_key(const ftcs_record_set_t *rs,
                              const char *key_value,
                              size_t struct_size);
 
-/*
- * Find a record by array index (primary_key_mode == FTCS_KEY_INDEX).
+/**
+ * @brief 配列添字でレコードを取得する（FTCS_KEY_INDEX 用）
  *
- * key_value must be a non-negative integer string.
- * The index must be less than rs->count; larger values are rejected.
- * Returns pointer to the record at that index, or NULL on error.
+ * @param rs          検索対象のレコード集合
+ * @param key_value   0-based の整数を表す文字列
+ * @param struct_size 1レコードのバイトサイズ
+ * @return 対応レコードへのポインタ、範囲外または不正な場合は NULL
  */
 const void *ftcs_find_by_index(const ftcs_record_set_t *rs,
                                const char *key_value,
                                size_t struct_size);
 
-/* ── Core / CLI ──────────────────────────────────────────────── */
+/* ── フレームワーク エントリポイント ─────────────────────── */
 
-/* Framework configuration – filled in by the user's main() */
+/**
+ * @brief フレームワーク全体の設定（利用者の main() が用意する）
+ */
 typedef struct {
-    const char                 *program_name;
-    const ftcs_field_mapping_t *mapping;
-    const ftcs_parser_config_t *parser_config;
-    size_t                      struct_size;
-    void (*dump_fn)(const void *data);  /* Optional: pretty-print callback */
-    void                       *shm_addr;  /* Caller-provided shm base address (NULL = no shm) */
-    size_t                      shm_size;  /* Caller-provided shm region size in bytes */
+    const char                 *program_name;  /**< プログラム名（使用方法表示に使用） */
+    const ftcs_field_mapping_t *mapping;       /**< フィールドマッピングテーブル */
+    const ftcs_parser_config_t *parser_config; /**< パーサー設定 */
+    size_t                      struct_size;   /**< 1レコードのバイトサイズ */
+    void (*dump_fn)(const void *data);         /**< レコード内容をダンプするコールバック（省略可） */
+    void                       *shm_addr;      /**< 呼び出し元が用意した共有メモリ先頭アドレス（NULL = 不使用） */
+    size_t                      shm_size;      /**< 共有メモリ領域のバイトサイズ */
 } ftcs_config_t;
 
-/*
- * Framework entry point.
- * Parses CLI arguments, reads the file, and operates on shared memory.
- * Returns 0 on success, non-zero on error.
+/**
+ * @brief フレームワークのエントリポイント
+ *
+ * CLIオプションを解釈し、ファイルをパースして共有メモリへ書き込む。
+ *
+ * @param argc   コマンドライン引数の数
+ * @param argv   コマンドライン引数の配列
+ * @param config フレームワーク設定
+ * @return 成功時 0、エラー時は非ゼロ
  */
 int ftcs_main(int argc, char *argv[], const ftcs_config_t *config);
 

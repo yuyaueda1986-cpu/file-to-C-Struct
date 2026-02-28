@@ -1,10 +1,10 @@
 /*
  * test_ftcs.cpp
- * Google Test suite for libftcs (ftcs_parser.c / ftcs_core.c)
+ * libftcs（ftcs_parser.c / ftcs_core.c）の Google Test スイート
  *
- * Note: FTCS_FIELD / FTCS_INFER_TYPE use C11 _Generic which is not available
- * in C++.  Mapping tables are therefore defined manually (offsetof + explicit
- * type tags) without relying on the convenience macros.
+ * 注意: FTCS_FIELD / FTCS_INFER_TYPE は C11 _Generic を使用するため C++ では
+ * 利用できない。そのためマッピングテーブルはマクロを使わず offsetof と
+ * 型タグを直接指定して定義する。
  */
 
 #include <gtest/gtest.h>
@@ -15,9 +15,7 @@ extern "C" {
 #include "ftcs.h"
 }
 
-/* ─────────────────────────────────────────────────────────────
- * Test structs
- * ───────────────────────────────────────────────────────────── */
+/* ── テスト用構造体 ──────────────────────────────────────── */
 
 typedef struct {
     int    id;
@@ -41,9 +39,7 @@ typedef struct {
     char   strval[32];
 } all_types_t;
 
-/* ─────────────────────────────────────────────────────────────
- * Mapping tables (defined manually – C++ cannot use _Generic)
- * ───────────────────────────────────────────────────────────── */
+/* ── マッピングテーブル（C++ では _Generic が使えないため手動定義） ── */
 
 static const ftcs_field_mapping_t sample_mapping[] = {
     { "ID",    offsetof(sample_t, id),    sizeof(int),      FTCS_TYPE_INT    },
@@ -70,9 +66,7 @@ static const ftcs_field_mapping_t all_types_mapping[] = {
     { nullptr, 0, 0, FTCS_TYPE_INT }
 };
 
-/* ─────────────────────────────────────────────────────────────
- * Parser configs
- * ───────────────────────────────────────────────────────────── */
+/* ── パーサー設定 ────────────────────────────────────────── */
 
 static const ftcs_parser_config_t sample_cfg = {
     '#', "=", "ID", FTCS_KEY_FIELD, nullptr
@@ -87,17 +81,13 @@ static const ftcs_parser_config_t sensor_sequential_cfg = {
     '#', "=", nullptr, FTCS_KEY_INDEX, nullptr
 };
 
-/* ─────────────────────────────────────────────────────────────
- * Helper: resolve a path inside test/data/
- * ───────────────────────────────────────────────────────────── */
-static std::string data(const char *name)
-{
-    return std::string(TEST_DATA_DIR) + "/" + name;
-}
+/* ── 関数宣言（目次） ────────────────────────────────────── */
 
-/* ═════════════════════════════════════════════════════════════
- * Group 1: ftcs_parse_file — 引数バリデーション
- * ═════════════════════════════════════════════════════════════ */
+static std::string data(const char *name);
+
+/* ══════════════════════════════════════════════════════════
+ * グループ1: ftcs_parse_file — 引数バリデーション
+ * ══════════════════════════════════════════════════════════ */
 
 TEST(ParseFile, NullFilepath)
 {
@@ -123,9 +113,9 @@ TEST(ParseFile, NonexistentFile)
                                        sample_mapping, sizeof(sample_t)));
 }
 
-/* ═════════════════════════════════════════════════════════════
- * Group 2: ftcs_parse_file — 基本パース (FTCS_KEY_FIELD)
- * ═════════════════════════════════════════════════════════════ */
+/* ══════════════════════════════════════════════════════════
+ * グループ2: ftcs_parse_file — 基本パース (FTCS_KEY_FIELD)
+ * ══════════════════════════════════════════════════════════ */
 
 class ParseBasic : public ::testing::Test {
 protected:
@@ -167,9 +157,9 @@ TEST_F(ParseBasic, ThirdRecord)
     EXPECT_DOUBLE_EQ(2.718, r[2].value);
 }
 
-/* ═════════════════════════════════════════════════════════════
- * Group 3: ftcs_parse_file — コメント行・空行スキップ
- * ═════════════════════════════════════════════════════════════ */
+/* ══════════════════════════════════════════════════════════
+ * グループ3: ftcs_parse_file — コメント行・空行スキップ
+ * ══════════════════════════════════════════════════════════ */
 
 TEST(ParseSkip, CommentsAndEmptyLines)
 {
@@ -188,9 +178,9 @@ TEST(ParseSkip, CommentsAndEmptyLines)
     ftcs_record_set_free(rs);
 }
 
-/* ═════════════════════════════════════════════════════════════
- * Group 4: ftcs_parse_file — 全フィールド型
- * ═════════════════════════════════════════════════════════════ */
+/* ══════════════════════════════════════════════════════════
+ * グループ4: ftcs_parse_file — 全フィールド型
+ * ══════════════════════════════════════════════════════════ */
 
 TEST(ParseAllTypes, FieldValues)
 {
@@ -212,9 +202,9 @@ TEST(ParseAllTypes, FieldValues)
     ftcs_record_set_free(rs);
 }
 
-/* ═════════════════════════════════════════════════════════════
- * Group 5: FTCS_KEY_INDEX + index_field_name (順不同配置)
- * ═════════════════════════════════════════════════════════════ */
+/* ══════════════════════════════════════════════════════════
+ * グループ5: FTCS_KEY_INDEX + index_field_name (順不同配置)
+ * ══════════════════════════════════════════════════════════ */
 
 class ParseIndexField : public ::testing::Test {
 protected:
@@ -254,9 +244,9 @@ TEST_F(ParseIndexField, Index2IsServerRoom)
     EXPECT_FLOAT_EQ(40.0f, r[2].humidity);
 }
 
-/* ═════════════════════════════════════════════════════════════
- * Group 6: FTCS_KEY_INDEX + index_field_name=NULL (順次モード)
- * ═════════════════════════════════════════════════════════════ */
+/* ══════════════════════════════════════════════════════════
+ * グループ6: FTCS_KEY_INDEX + index_field_name=NULL (順次モード)
+ * ══════════════════════════════════════════════════════════ */
 
 TEST(ParseSequential, OrderPreserved)
 {
@@ -274,9 +264,9 @@ TEST(ParseSequential, OrderPreserved)
     ftcs_record_set_free(rs);
 }
 
-/* ═════════════════════════════════════════════════════════════
- * Group 7: FTCS_KEY_INDEX エラーケース
- * ═════════════════════════════════════════════════════════════ */
+/* ══════════════════════════════════════════════════════════
+ * グループ7: FTCS_KEY_INDEX エラーケース
+ * ══════════════════════════════════════════════════════════ */
 
 TEST(ParseIndexError, IndexZeroRejected)
 {
@@ -296,9 +286,9 @@ TEST(ParseIndexError, MissingIndexField)
     EXPECT_EQ(nullptr, rs);
 }
 
-/* ═════════════════════════════════════════════════════════════
- * Group 8: ftcs_find_by_key
- * ═════════════════════════════════════════════════════════════ */
+/* ══════════════════════════════════════════════════════════
+ * グループ8: ftcs_find_by_key
+ * ══════════════════════════════════════════════════════════ */
 
 class FindByKey : public ::testing::Test {
 protected:
@@ -374,9 +364,9 @@ TEST_F(FindByKey, UnknownFieldName)
                                         "42", sizeof(sample_t)));
 }
 
-/* ═════════════════════════════════════════════════════════════
- * Group 9: ftcs_find_by_index
- * ═════════════════════════════════════════════════════════════ */
+/* ══════════════════════════════════════════════════════════
+ * グループ9: ftcs_find_by_index
+ * ══════════════════════════════════════════════════════════ */
 
 class FindByIndex : public ::testing::Test {
 protected:
@@ -436,9 +426,9 @@ TEST_F(FindByIndex, NullKeyValue)
     EXPECT_EQ(nullptr, ftcs_find_by_index(rs, nullptr, sizeof(sensor_t)));
 }
 
-/* ═════════════════════════════════════════════════════════════
- * Group 10: ftcs_record_set_free — 安全性
- * ═════════════════════════════════════════════════════════════ */
+/* ══════════════════════════════════════════════════════════
+ * グループ10: ftcs_record_set_free — 安全性
+ * ══════════════════════════════════════════════════════════ */
 
 TEST(RecordSetFree, NullIsNoOp)
 {
@@ -455,10 +445,10 @@ TEST(RecordSetFree, ValidPointerFreed)
     ftcs_record_set_free(rs); /* クラッシュ・二重解放がなければ OK */
 }
 
-/* ═════════════════════════════════════════════════════════════
- * Group 11: shm コピーロジック検証
+/* ══════════════════════════════════════════════════════════
+ * グループ11: shm コピーロジック検証
  * (ftcs_core.c の memcpy 処理と同等のロジックをここで直接テスト)
- * ═════════════════════════════════════════════════════════════ */
+ * ══════════════════════════════════════════════════════════ */
 
 TEST(ShmCopy, FullCopyToBuffer)
 {
@@ -470,7 +460,7 @@ TEST(ShmCopy, FullCopyToBuffer)
     sample_t shm_buf[3] = {};
     size_t shm_size = sizeof(shm_buf);
     size_t bytes = rs->count * rs->struct_size;
-    if (bytes > shm_size) bytes = shm_size;
+    if (bytes > shm_size) { bytes = shm_size; }
     memcpy(shm_buf, rs->records, bytes);
 
     EXPECT_EQ(42,  shm_buf[0].id);
@@ -492,7 +482,7 @@ TEST(ShmCopy, TruncatedWhenBufferSmall)
     sample_t shm_buf[3] = {};
     size_t shm_size = sizeof(sample_t); /* 1 レコード分のみ */
     size_t bytes = rs->count * rs->struct_size;
-    if (bytes > shm_size) bytes = shm_size;
+    if (bytes > shm_size) { bytes = shm_size; }
     memcpy(shm_buf, rs->records, bytes);
 
     EXPECT_EQ(42, shm_buf[0].id);
@@ -500,4 +490,16 @@ TEST(ShmCopy, TruncatedWhenBufferSmall)
     EXPECT_EQ(0,  shm_buf[1].id);
 
     ftcs_record_set_free(rs);
+}
+
+/* ── ヘルパー ───────────────────────────────────────────── */
+
+/**
+ * @brief test/data/ ディレクトリ内のファイルパスを解決する
+ * @param name ファイル名
+ * @return test/data/<name> の絶対パス文字列
+ */
+static std::string data(const char *name)
+{
+    return std::string(TEST_DATA_DIR) + "/" + name;
 }

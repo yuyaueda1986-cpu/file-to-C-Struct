@@ -195,11 +195,50 @@ ftcs_record_set_free(rs);
 
 ## コーディング規約
 
-- C11 (`-std=c11`)
+### 基本
+
+- 言語標準: C11 (`-std=c11`)、テストは C++17
 - コンパイラ警告: `-Wall -Wextra`
 - プレフィックス: 公開APIは `ftcs_` を使用
 - マッピング定義には `FTCS_FIELD` / `FTCS_MAPPING_BEGIN` / `FTCS_MAPPING_END` マクロを使用
 - **1翻訳単位に 1 マッピングのみ**（`_ftcs_current_t` typedef の衝突を避けるため）
+
+### コメント
+
+- コメントはすべて**日本語**で記述する
+- 関数・構造体・enum には **Doxygen 形式** (`/** @brief ... */`) のコメントを付与する
+- コメントは *what*（何をしているか）ではなく *why*（なぜそうするか）を語る
+
+```c
+/* Good — 理由を説明している */
+timeout_ms = 200;  // センサーの応答仕様上限が180ms のため、余裕を持たせた値
+
+/* Bad — コードの翻訳にすぎない */
+timeout_ms = 200;  // タイムアウトを200msに設定する
+```
+
+### コードスタイル
+
+- `if` / `else` / `for` / `while` の本体が1行でも必ず `{}` を付ける
+- マジックナンバーは必ず名前付き定数 (`#define` / `const`) にし、値の根拠をコメントで示す
+- 識別子はすべて `snake_case`、定数・マクロは `ALL_CAPS`、typedef 型は末尾に `_t`
+
+### static 関数の配置
+
+ファイル先頭に前方宣言（目次）をまとめ、関数定義はトップダウン（呼び出す側を上）に並べる。
+読者がファイルの先頭から「概要→詳細」の順に読めるようにするためである。
+
+```c
+/* --- 関数宣言（目次） --- */
+static int  parse(char *line, ...);   /* 上位処理 */
+static int  lookup(const char *key);  /* 中位処理 */
+static void convert(void *field, ...); /* 末端処理 */
+
+/* --- 関数定義（概要→詳細の順） --- */
+static int parse(char *line, ...) { ... lookup(...); ... }
+static int lookup(const char *key) { ... convert(...); ... }
+static void convert(void *field, ...) { ... }
+```
 
 ## 注意事項
 

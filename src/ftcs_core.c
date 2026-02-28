@@ -4,22 +4,17 @@
 #include <getopt.h>
 #include "ftcs.h"
 
-static void print_usage(const ftcs_config_t *config)
-{
-    fprintf(stderr,
-        "Usage: %s [options]\n"
-        "  -f, --file <path>       Input file path (required)\n"
-        "  -d, --dump              Dump struct contents\n"
-        "  -k, --key <value>       Search by primary key value\n"
-        "  -h, --help              Show this help\n",
-        config->program_name);
-}
+/* ── 関数宣言（目次） ────────────────────────────────────── */
+
+static void print_usage(const ftcs_config_t *config);
+
+/* ── 関数定義（概要→詳細の順） ──────────────────────────── */
 
 int ftcs_main(int argc, char *argv[], const ftcs_config_t *config)
 {
-    const char *filepath = NULL;
+    const char *filepath  = NULL;
     const char *key_value = NULL;
-    int do_dump = 0;
+    int         do_dump   = 0;
 
     static struct option long_opts[] = {
         { "file",    required_argument, NULL, 'f' },
@@ -51,7 +46,7 @@ int ftcs_main(int argc, char *argv[], const ftcs_config_t *config)
     }
 
     if (!filepath) {
-        fprintf(stderr, "%s: --file is required\n", config->program_name);
+        fprintf(stderr, "%s: --file は必須オプション\n", config->program_name);
         print_usage(config);
         return 1;
     }
@@ -59,14 +54,16 @@ int ftcs_main(int argc, char *argv[], const ftcs_config_t *config)
     ftcs_record_set_t *rs = ftcs_parse_file(filepath, config->parser_config,
                                             config->mapping, config->struct_size);
     if (!rs) {
-        fprintf(stderr, "%s: failed to parse '%s'\n",
+        fprintf(stderr, "%s: '%s' のパースに失敗した\n",
                 config->program_name, filepath);
         return 1;
     }
 
     if (config->shm_addr != NULL && config->shm_size > 0) {
         size_t bytes = rs->count * rs->struct_size;
-        if (bytes > config->shm_size) bytes = config->shm_size;
+        if (bytes > config->shm_size) {
+            bytes = config->shm_size; /* shm 領域を超えないよう切り詰める */
+        }
         memcpy(config->shm_addr, rs->records, bytes);
     }
 
@@ -74,7 +71,7 @@ int ftcs_main(int argc, char *argv[], const ftcs_config_t *config)
 
     if (do_dump) {
         if (!config->dump_fn) {
-            fprintf(stderr, "%s: no dump function registered\n",
+            fprintf(stderr, "%s: dump 関数が登録されていない\n",
                     config->program_name);
             ret = 1;
             goto cleanup;
@@ -85,14 +82,14 @@ int ftcs_main(int argc, char *argv[], const ftcs_config_t *config)
             if (config->parser_config->primary_key_mode == FTCS_KEY_INDEX) {
                 rec = ftcs_find_by_index(rs, key_value, config->struct_size);
                 if (!rec) {
-                    /* error already printed by ftcs_find_by_index */
+                    /* エラーメッセージは ftcs_find_by_index 側で出力済み */
                     ret = 1;
                     goto cleanup;
                 }
             } else {
                 const char *pk = config->parser_config->primary_key;
                 if (!pk) {
-                    fprintf(stderr, "%s: no primary_key configured\n",
+                    fprintf(stderr, "%s: primary_key が設定されていない\n",
                             config->program_name);
                     ret = 1;
                     goto cleanup;
@@ -101,7 +98,7 @@ int ftcs_main(int argc, char *argv[], const ftcs_config_t *config)
                                        pk, key_value,
                                        config->struct_size);
                 if (!rec) {
-                    fprintf(stderr, "%s: no record with %s=%s\n",
+                    fprintf(stderr, "%s: %s=%s のレコードが見つからない\n",
                             config->program_name, pk, key_value);
                     ret = 1;
                     goto cleanup;
@@ -119,4 +116,19 @@ int ftcs_main(int argc, char *argv[], const ftcs_config_t *config)
 cleanup:
     ftcs_record_set_free(rs);
     return ret;
+}
+
+/**
+ * @brief 使用方法を stderr に表示する
+ * @param config フレームワーク設定（プログラム名の取得に使用）
+ */
+static void print_usage(const ftcs_config_t *config)
+{
+    fprintf(stderr,
+        "Usage: %s [options]\n"
+        "  -f, --file <path>       Input file path (required)\n"
+        "  -d, --dump              Dump struct contents\n"
+        "  -k, --key <value>       Search by primary key value\n"
+        "  -h, --help              Show this help\n",
+        config->program_name);
 }
